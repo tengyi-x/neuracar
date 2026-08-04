@@ -27,8 +27,10 @@ def standardize(X_train: np.ndarray, X_test: np.ndarray):
     return (X_train - mu) / sigma, (X_test - mu) / sigma, mu, sigma
 
 
-def build_dataset(trace_path: str, window: float, train_frac: float = 0.7, feature_mask: List[str] = None):
-    """Loads a trace, builds standardized (X_train, y_train, X_test, y_test) tensors, split chronologically."""
+def build_dataset_with_metadata(
+    trace_path: str, window: float, train_frac: float = 0.7, feature_mask: List[str] = None
+):
+    """Build a chronological dataset and retain training-set normalization metadata."""
     requests: List[Request] = list(read_trace(trace_path))
     X = cap_infs(extract_features(requests))
     y = np.array(reuse_labels(requests, window), dtype=np.float64).reshape(-1, 1)
@@ -38,7 +40,7 @@ def build_dataset(trace_path: str, window: float, train_frac: float = 0.7, featu
         X = X[:, keep]
 
     train_idx, test_idx = train_test_split_by_position(len(requests), train_frac)
-    X_train, X_test, _, _ = standardize(X[train_idx], X[test_idx])
+    X_train, X_test, mu, sigma = standardize(X[train_idx], X[test_idx])
     y_train, y_test = y[train_idx], y[test_idx]
 
     return (
@@ -46,7 +48,14 @@ def build_dataset(trace_path: str, window: float, train_frac: float = 0.7, featu
         torch.tensor(y_train, dtype=torch.float32),
         torch.tensor(X_test, dtype=torch.float32),
         torch.tensor(y_test, dtype=torch.float32),
+        mu,
+        sigma,
     )
+
+
+def build_dataset(trace_path: str, window: float, train_frac: float = 0.7, feature_mask: List[str] = None):
+    """Loads standardized train/test tensors, split chronologically."""
+    return build_dataset_with_metadata(trace_path, window, train_frac, feature_mask)[:4]
 
 
 def train_reuse_net(X_train, y_train, X_test, y_test, epochs: int = 200, lr: float = 0.01, seed: int = 42):

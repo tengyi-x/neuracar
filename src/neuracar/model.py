@@ -10,6 +10,8 @@ class ReuseNet(nn.Module):
     def __init__(self, n_features: int = len(FEATURES), hidden_sizes=(16, 8)):
         super().__init__()
         h1, h2 = hidden_sizes
+        self.n_features = n_features
+        self.hidden_sizes = tuple(hidden_sizes)
         self.net = nn.Sequential(
             nn.Linear(n_features, h1),
             nn.ReLU(),
