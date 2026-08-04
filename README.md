@@ -60,9 +60,6 @@ libCacheSim build/trace notes are in [NOTES.md](NOTES.md).
 - [x] Add deterministic unit and synthetic end-to-end tests.
 - [ ] Run the final experiments on 2-3 real traces and retain the result artifacts.
 
-The adaptive implementation is currently under review in
-[PR #2](https://github.com/tengyi-x/neuracar/pull/2).
-
 ## Repository layout
 
 ```text
@@ -73,8 +70,6 @@ src/neuracar/                 Features, labels, model, training, inference, and 
 src/experts/                  Tracking-the-best-expert policy
 tests/                        Policy, simulator, checkpoint, and adapter tests
 ```
-
-Some adaptive-policy paths become available on `main` after PR #2 is merged.
 
 ## Environment setup
 
@@ -104,12 +99,19 @@ python scripts/gen_synthetic_trace.py data/synthetic.csv \
   --n-requests 20000 --n-objects 500
 ```
 
-## Train and evaluate the reuse model
+## Train and export the reuse model
+
+The simulator needs both the trained network and the training-set normalization statistics. Export them in one
+checkpoint:
 
 ```bash
 python scripts/train_reuse_net.py data/prepared.csv \
-  --window 360 --train-frac 0.7 --epochs 200
+  --window 360 --train-frac 0.7 --epochs 200 \
+  --checkpoint models/reuse_net.pt
 ```
+
+The checkpoint records feature order, architecture, model weights, mean, and standard deviation. NeuraCaR
+rejects incompatible feature orders instead of silently producing incorrect predictions.
 
 Run the drop-one-feature ablation:
 
@@ -118,13 +120,7 @@ python scripts/run_ablation.py data/prepared.csv \
   --window 360 --train-frac 0.7 --epochs 400
 ```
 
-After PR #2 is merged, add `--checkpoint models/reuse_net.pt` to the training command to export the model,
-feature order, architecture, and training-set normalization statistics needed by the online NN expert.
-
 ## Run the adaptive experiments
-
-These commands are available on the `neuracar-experts` branch and will be available on `main` after PR #2 is
-merged.
 
 Compare internal LRU, LFU, LeCaR, and NeuraCaR across cache sizes:
 
@@ -142,6 +138,8 @@ python scripts/run_cache_experiments.py data/prepared.csv models/reuse_net.pt \
   --libcachesim third_party/libCacheSim/_build/bin/cachesim \
   --output results/cache_experiments.csv
 ```
+
+The main CSV contains request and byte hit ratios. Each cache size also gets a NeuraCaR weight-timeline CSV.
 
 Measure adaptation across a workload boundary:
 
@@ -161,8 +159,6 @@ Pass `--shared-object-ids` only when both phases use the same logical object nam
 
 ## Tests
 
-After PR #2 is merged:
-
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src scripts tests
@@ -174,8 +170,8 @@ and libCacheSim output parsing.
 
 ## Current status and next milestone
 
-The supervised-learning pipeline and recorded ablations are on `main`. The adaptive-policy implementation has
-passed ten unit tests and synthetic checkpoint/cache/workload-shift smoke tests and is awaiting review in PR #2.
+The supervised-learning pipeline, adaptive three-expert implementation, documentation, and synthetic
+end-to-end checks are complete. Ten unit tests pass.
 
 The next project milestone is experimental rather than architectural:
 
