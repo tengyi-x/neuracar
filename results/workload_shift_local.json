@@ -1,0 +1,26 @@
+{
+  "capacity": 500000.0,
+  "phase_a_requests": 200000,
+  "phase_a_hit_ratio": 0.699665,
+  "phase_b_requests": 200000,
+  "phase_b_hit_ratio": 0.79073,
+  "fixed_expert_phase_b_hit_ratios": {
+    "lru": 0.792505,
+    "lfu": 0.556055,
+    "nn": 0.788605
+  },
+  "nn_wrong_on_phase_b": true,
+  "weights_at_shift": {
+    "lru": 0.3229909773654342,
+    "lfu": 0.4989726527768446,
+    "nn": 0.17803636985772123
+  },
+  "final_weights": {
+    "lru": 0.10804512566937384,
+    "lfu": 0.34432993501643183,
+    "nn": 0.5476249393141944
+  },
+  "nn_weight_change": 0.3695885694564732,
+  "nn_weight_decreased": false,
+  "fallback_observed": false
+}
