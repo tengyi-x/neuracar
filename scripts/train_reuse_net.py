@@ -15,16 +15,28 @@ def main():
     parser.add_argument("--train-frac", type=float, default=0.7)
     parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--lr", type=float, default=0.01)
+    parser.add_argument(
+        "--feature-transform",
+        choices=("log1p", "identity"),
+        default="log1p",
+        help="Transform applied before training-set standardization",
+    )
     parser.add_argument("--checkpoint", help="Save a deployable model checkpoint at this path")
     args = parser.parse_args()
 
     X_train, y_train, X_test, y_test, mean, scale = build_dataset_with_metadata(
-        args.trace_path, args.window, args.train_frac
+        args.trace_path, args.window, args.train_frac, feature_transform=args.feature_transform
     )
     model, history = train_reuse_net(X_train, y_train, X_test, y_test, epochs=args.epochs, lr=args.lr)
 
     if args.checkpoint:
-        save_reuse_checkpoint(args.checkpoint, model, mean, scale)
+        save_reuse_checkpoint(
+            args.checkpoint,
+            model,
+            mean,
+            scale,
+            feature_transform=args.feature_transform,
+        )
 
     metrics = evaluate(model, X_test, y_test)
     print(f"Final train loss: {history['train_loss'][-1]:.4f}")

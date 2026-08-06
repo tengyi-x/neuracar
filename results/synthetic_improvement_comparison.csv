@@ -1,0 +1,7 @@
+configuration,cache_size,mean_request_hit_ratio,std_request_hit_ratio,seeds,window,feature_transform,nn_candidates,initial_weights
+original,65536,0.503940,0.001004,5,100,identity,all,uniform
+log1p_only,65536,0.516890,0.000797,5,100,log1p,all,uniform
+capacity_tuned,65536,0.529180,0.000725,5,500,log1p,32,"0.45/0.40/0.15"
+original,262144,0.668100,0.000511,5,100,identity,all,uniform
+log1p_only,262144,0.676880,0.000360,5,100,log1p,all,uniform
+capacity_tuned,262144,0.672170,0.000419,5,500,log1p,32,"0.45/0.40/0.15"

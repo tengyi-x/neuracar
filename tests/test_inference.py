@@ -25,6 +25,26 @@ class CheckpointTests(unittest.TestCase):
 
         np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-7)
 
+    def test_log1p_checkpoint_applies_transform_before_standardizing(self):
+        model = ReuseNet()
+        mean = np.array([1.0, 2.0, 3.0, 4.0])
+        scale = np.array([2.0, 3.0, 4.0, 5.0])
+        features = [[5.0, 8.0, 11.0, 14.0]]
+        transformed = np.log1p(np.asarray(features))
+        standardized = (transformed - mean) / scale
+        expected = model.predict_proba(
+            torch.tensor(standardized, dtype=torch.float32)
+        ).reshape(-1).tolist()
+
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Path(directory) / "reuse_net.pt"
+            save_reuse_checkpoint(
+                str(checkpoint), model, mean, scale, feature_transform="log1p"
+            )
+            actual = TorchReusePredictor(str(checkpoint)).predict_reuse(features)
+
+        np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-7)
+
 
 if __name__ == "__main__":
     unittest.main()

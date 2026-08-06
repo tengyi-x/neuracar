@@ -5,6 +5,7 @@ from __future__ import annotations
 import heapq
 import random
 from collections import Counter, OrderedDict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Iterable, Protocol, Sequence
 
@@ -96,6 +97,8 @@ class AdaptiveCache:
         learning_rate: float = 0.45,
         history_discount: float = 0.995,
         history_capacity: float | None = None,
+        initial_weights: Mapping[str, float] | None = None,
+        nn_candidate_count: int | None = None,
         seed: int = 42,
         snapshot_interval: int | None = None,
     ):
@@ -110,12 +113,15 @@ class AdaptiveCache:
             raise ValueError("the nn expert requires a reuse predictor")
         if snapshot_interval is not None and snapshot_interval <= 0:
             raise ValueError("snapshot_interval must be positive")
+        if nn_candidate_count is not None and nn_candidate_count <= 0:
+            raise ValueError("nn_candidate_count must be positive")
 
         self.capacity = float(capacity)
         self.predictor = predictor
         self.history_discount = history_discount
         self.snapshot_interval = snapshot_interval
-        self.weights = MultiplicativeWeights(experts, learning_rate)
+        self.weights = MultiplicativeWeights(experts, learning_rate, initial_weights)
+        self.nn_candidate_count = nn_candidate_count
         ghost_capacity = history_capacity or capacity
         self.histories = {name: GhostHistory(ghost_capacity) for name in self.weights.experts}
         self.rng = random.Random(seed)
@@ -162,7 +168,7 @@ class AdaptiveCache:
                     return obj
                 heapq.heappop(self._lfu_heap)
 
-        candidates = list(self.cache)
+        candidates = self._nn_candidates()
         features = [self._features(obj, request_index, request_time) for obj in candidates]
         probabilities = self.predictor.predict_reuse(features)  # type: ignore[union-attr]
         if len(probabilities) != len(candidates):
@@ -174,6 +180,35 @@ class AdaptiveCache:
             zip(candidates, probabilities),
             key=lambda pair: (pair[1], self.last_index[pair[0]], pair[0]),
         )[0]
+
+    def _nn_candidates(self) -> list[str]:
+        """Guard the NN with a mix of plausible LRU and LFU victims.
+
+        Scoring a bounded set reduces inference cost and prevents an
+        out-of-distribution prediction from evicting an obviously hot object.
+        ``None`` preserves the original full-cache NN scan.
+        """
+        count = self.nn_candidate_count
+        if count is None or count >= len(self.cache):
+            return list(self.cache)
+
+        lru_order = sorted(self.cache, key=lambda obj: (self.last_index[obj], obj))
+        lfu_order = sorted(
+            self.cache,
+            key=lambda obj: (self.cache[obj].frequency, self.last_index[obj], obj),
+        )
+        selected: dict[str, None] = {}
+        lru_quota = (count + 1) // 2
+        lfu_quota = count // 2
+        for obj_id in lru_order[:lru_quota]:
+            selected[obj_id] = None
+        for obj_id in lfu_order[:lfu_quota]:
+            selected[obj_id] = None
+        for obj_id in lru_order + lfu_order:
+            if len(selected) >= count:
+                break
+            selected[obj_id] = None
+        return list(selected)
 
     def _record_snapshot(self) -> None:
         snapshot = {

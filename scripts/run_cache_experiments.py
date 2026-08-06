@@ -33,6 +33,20 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--learning-rate", type=float, default=0.45)
     parser.add_argument("--history-discount", type=float, default=0.995)
+    parser.add_argument(
+        "--initial-weights",
+        nargs=3,
+        type=float,
+        metavar=("LRU", "LFU", "NN"),
+        default=(1.0, 1.0, 1.0),
+        help="Initial NeuraCaR expert weights (normalized internally)",
+    )
+    parser.add_argument(
+        "--nn-candidates",
+        type=int,
+        default=0,
+        help="NN candidate budget; use 0 for the original full-cache scan",
+    )
     parser.add_argument("--snapshot-interval", type=int, default=10000)
     parser.add_argument("--libcachesim", help="Path to the optional cachesim executable")
     parser.add_argument(
@@ -46,6 +60,10 @@ def main() -> None:
         help="libCacheSim CSV reader parameters",
     )
     args = parser.parse_args()
+    if args.nn_candidates < 0:
+        parser.error("--nn-candidates must be non-negative")
+    if any(weight < 0 for weight in args.initial_weights) or sum(args.initial_weights) <= 0:
+        parser.error("--initial-weights must be non-negative with a positive sum")
 
     requests = list(read_trace(args.trace_path))
     predictor = TorchReusePredictor(args.checkpoint)
@@ -55,6 +73,12 @@ def main() -> None:
 
     for capacity in args.cache_sizes:
         for policy in ("LRU", "LFU", "LeCaR", "NeuraCaR"):
+            neuracar_options = {}
+            if policy == "NeuraCaR":
+                neuracar_options = {
+                    "initial_weights": dict(zip(("lru", "lfu", "nn"), args.initial_weights)),
+                    "nn_candidate_count": args.nn_candidates or None,
+                }
             result = simulate_policy(
                 requests,
                 capacity,
@@ -64,6 +88,7 @@ def main() -> None:
                 learning_rate=args.learning_rate,
                 history_discount=args.history_discount,
                 snapshot_interval=args.snapshot_interval,
+                **neuracar_options,
             )
             rows.append(
                 {
