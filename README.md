@@ -113,6 +113,10 @@ python scripts/train_reuse_net.py data/prepared.csv \
 The checkpoint records feature order, architecture, model weights, mean, and standard deviation. NeuraCaR
 rejects incompatible feature orders instead of silently producing incorrect predictions.
 
+New checkpoints use a leakage-safe `log1p` feature transform before training-set standardization. Label windows
+that cross the chronological train/test boundary or the end of the trace are excluded. To reproduce the older
+raw-feature behavior, pass `--feature-transform identity`.
+
 Run the drop-one-feature ablation:
 
 ```bash
@@ -129,6 +133,21 @@ python scripts/run_cache_experiments.py data/prepared.csv models/reuse_net.pt \
   --cache-sizes 10m 50m 100m \
   --output results/cache_experiments.csv
 ```
+
+The NN can optionally rank only a guarded union of plausible LRU and LFU victims. Initial expert weights are
+also configurable. Both should be selected on a validation trace because neither setting is uniformly best:
+
+```bash
+python scripts/run_cache_experiments.py data/prepared.csv models/reuse_net.pt \
+  --cache-sizes 10m 50m 100m --nn-candidates 128 \
+  --initial-weights 0.45 0.40 0.15 \
+  --output results/cache_experiments_guarded.csv
+```
+
+Use `--nn-candidates 0` for the original full-cache scan. The synthetic comparison in
+[results/synthetic_improvement_review.md](results/synthetic_improvement_review.md) found that `log1p`
+preprocessing improved both tested capacities, while candidate guarding and conservative initial weights were
+workload/capacity dependent.
 
 Add the proposal's full native baseline set by providing the built libCacheSim executable:
 
@@ -171,7 +190,7 @@ and libCacheSim output parsing.
 ## Current status and next milestone
 
 The supervised-learning pipeline, adaptive three-expert implementation, documentation, and synthetic
-end-to-end checks are complete. Ten unit tests pass.
+end-to-end checks are complete. Fourteen unit tests pass.
 
 The next project milestone is experimental rather than architectural:
 

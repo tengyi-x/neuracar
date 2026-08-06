@@ -15,6 +15,7 @@ def save_reuse_checkpoint(
     mean: Sequence[float],
     scale: Sequence[float],
     feature_names: Sequence[str] = FEATURES,
+    feature_transform: str = "identity",
 ) -> None:
     """Save everything needed to reproduce Person A's standardized inference."""
     destination = Path(path)
@@ -26,6 +27,7 @@ def save_reuse_checkpoint(
             "n_features": model.n_features,
             "hidden_sizes": list(model.hidden_sizes),
             "feature_names": list(feature_names),
+            "feature_transform": feature_transform,
             "mean": np.asarray(mean, dtype=np.float64).tolist(),
             "scale": np.asarray(scale, dtype=np.float64).tolist(),
         },
@@ -53,6 +55,9 @@ class TorchReusePredictor:
             raise ValueError("checkpoint normalization statistics have the wrong shape")
         if np.any(self.scale <= 0) or not np.all(np.isfinite(self.mean)) or not np.all(np.isfinite(self.scale)):
             raise ValueError("checkpoint normalization statistics must be finite with positive scales")
+        self.feature_transform = checkpoint.get("feature_transform", "identity")
+        if self.feature_transform not in {"identity", "log1p"}:
+            raise ValueError(f"unsupported feature transform: {self.feature_transform!r}")
 
         self.model = ReuseNet(
             n_features=int(checkpoint["n_features"]),
@@ -65,6 +70,10 @@ class TorchReusePredictor:
         values = np.asarray(features, dtype=np.float64)
         if values.ndim != 2 or values.shape[1] != len(self.feature_names):
             raise ValueError(f"expected an (n, {len(self.feature_names)}) feature matrix")
+        if self.feature_transform == "log1p":
+            if np.any(values < 0):
+                raise ValueError("log1p features must be non-negative")
+            values = np.log1p(values)
         standardized = (values - self.mean) / self.scale
         tensor = torch.tensor(standardized, dtype=torch.float32)
         return self.model.predict_proba(tensor).reshape(-1).tolist()

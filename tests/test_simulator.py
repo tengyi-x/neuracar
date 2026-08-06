@@ -44,6 +44,27 @@ class SimulatorTests(unittest.TestCase):
         self.assertIn("c", cache.cache)
         self.assertNotIn("b", cache.cache)
 
+    def test_nn_candidate_guard_scores_only_plausible_victims(self):
+        predictor = RecordingPredictor()
+        cache = AdaptiveCache(
+            4,
+            experts=("nn",),
+            predictor=predictor,
+            nn_candidate_count=2,
+        )
+        for request in (
+            Request(0, "a", 1),
+            Request(1, "b", 1),
+            Request(2, "c", 1),
+            Request(3, "d", 1),
+            Request(4, "a", 1),
+            Request(5, "e", 1),
+        ):
+            cache.access(request)
+
+        self.assertEqual(len(predictor.calls[-1]), 2)
+        self.assertIn("a", cache.cache)
+
     def test_history_miss_penalizes_the_responsible_expert(self):
         predictor = RecordingPredictor()
         cache = AdaptiveCache(

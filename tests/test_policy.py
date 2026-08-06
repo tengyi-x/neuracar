@@ -6,6 +6,13 @@ from experts import MultiplicativeWeights
 
 
 class MultiplicativeWeightsTests(unittest.TestCase):
+    def test_custom_initial_weights_are_normalized(self):
+        policy = MultiplicativeWeights(
+            ("lru", "lfu", "nn"),
+            initial_weights={"lru": 4.5, "lfu": 4.0, "nn": 1.5},
+        )
+        self.assertEqual(policy.weights, {"lru": 0.45, "lfu": 0.4, "nn": 0.15})
+
     def test_two_expert_penalty_matches_lecar_other_expert_reward(self):
         policy = MultiplicativeWeights(("lru", "lfu"), learning_rate=0.45)
         weights = policy.penalize("lru", reward=0.8)

@@ -49,6 +49,7 @@ def fixed_policy_phase_b_hit_ratio(
         predictor=predictor if "nn" in experts else None,
         learning_rate=args.learning_rate,
         history_discount=args.history_discount,
+        nn_candidate_count=args.nn_candidates or None,
         seed=args.seed,
     )
     for request in phase_a:
@@ -70,6 +71,20 @@ def main() -> None:
     parser.add_argument("--snapshot-interval", type=int, default=10000)
     parser.add_argument("--learning-rate", type=float, default=0.45)
     parser.add_argument("--history-discount", type=float, default=0.995)
+    parser.add_argument(
+        "--initial-weights",
+        nargs=3,
+        type=float,
+        metavar=("LRU", "LFU", "NN"),
+        default=(1.0, 1.0, 1.0),
+        help="Initial adaptive expert weights (normalized internally)",
+    )
+    parser.add_argument(
+        "--nn-candidates",
+        type=int,
+        default=0,
+        help="NN candidate budget; use 0 for the original full-cache scan",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--shared-object-ids",
@@ -78,6 +93,10 @@ def main() -> None:
     )
     parser.add_argument("--output-prefix", default="results/workload_shift")
     args = parser.parse_args()
+    if args.nn_candidates < 0:
+        parser.error("--nn-candidates must be non-negative")
+    if any(weight < 0 for weight in args.initial_weights) or sum(args.initial_weights) <= 0:
+        parser.error("--initial-weights must be non-negative with a positive sum")
 
     phase_a = limited_trace(args.phase_a_trace, args.phase_a_limit)
     phase_b = shift_timestamps(
@@ -94,6 +113,8 @@ def main() -> None:
         predictor=predictor,
         learning_rate=args.learning_rate,
         history_discount=args.history_discount,
+        initial_weights=dict(zip(("lru", "lfu", "nn"), args.initial_weights)),
+        nn_candidate_count=args.nn_candidates or None,
         seed=args.seed,
         snapshot_interval=args.snapshot_interval,
     )
