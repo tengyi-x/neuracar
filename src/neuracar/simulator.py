@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 import random
 from collections import Counter, OrderedDict
 from collections.abc import Mapping
@@ -127,6 +128,13 @@ class AdaptiveCache:
 
         self.cache: dict[str, CacheEntry] = {}
         self.occupied = 0.0
+        # LRU victim in O(1): keys stay in access order, oldest first. Kept in exact sync with
+        # self.cache (inserted/removed together) so eviction never needs to scan self.cache.
+        self._lru_order: OrderedDict[str, None] = OrderedDict()
+        # LFU victim in O(log n) amortized via a lazy-deletion min-heap of (frequency, last_index,
+        # obj_id). Stale entries (an object's frequency/last_index has since changed, or it's no
+        # longer cached) are discarded when popped rather than removed eagerly.
+        self._lfu_heap: list[tuple[int, int, str]] = []
         self.last_index: dict[str, int] = {}
         self.last_time: dict[str, float] = {}
         self._trace_time: float | None = None
@@ -151,9 +159,14 @@ class AdaptiveCache:
 
     def _victim(self, expert: str, request_index: int, request_time: float) -> str:
         if expert == "lru":
-            return min(self.cache, key=lambda obj: (self.last_index[obj], obj))
+            return next(iter(self._lru_order))
         if expert == "lfu":
-            return min(self.cache, key=lambda obj: (self.cache[obj].frequency, self.last_index[obj], obj))
+            while True:
+                frequency, last_index, obj = self._lfu_heap[0]
+                entry = self.cache.get(obj)
+                if entry is not None and entry.frequency == frequency and self.last_index.get(obj) == last_index:
+                    return obj
+                heapq.heappop(self._lfu_heap)
 
         candidates = self._nn_candidates()
         features = [self._features(obj, request_index, request_time) for obj in candidates]
@@ -224,6 +237,8 @@ class AdaptiveCache:
             self.hits += 1
             self.hit_bytes += request.size
             entry.frequency += 1
+            self._lru_order.move_to_end(request.obj_id)
+            heapq.heappush(self._lfu_heap, (entry.frequency, request_index, request.obj_id))
         else:
             regretted = None
             for history in self.histories.values():
@@ -241,6 +256,7 @@ class AdaptiveCache:
                     expert = self.weights.choose(self.rng)
                     victim = self._victim(expert, request_index, request.time)
                     victim_entry = self.cache.pop(victim)
+                    del self._lru_order[victim]
                     self.occupied -= victim_entry.size
                     self.histories[expert].add(
                         victim,
@@ -252,6 +268,8 @@ class AdaptiveCache:
                     history.discard(request.obj_id)
                 self.cache[request.obj_id] = CacheEntry(request.size)
                 self.occupied += request.size
+                self._lru_order[request.obj_id] = None
+                heapq.heappush(self._lfu_heap, (1, request_index, request.obj_id))
 
         self.frequency[request.obj_id] += 1
         self.last_index[request.obj_id] = request_index

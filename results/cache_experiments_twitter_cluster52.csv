@@ -1,0 +1,3 @@
+source,policy,cache_size,requests,hit_ratio,evictions
+python,NeuraCaR,500K,999999,0.6967,300982
+python,NeuraCaR,2M,999999,0.7746,216384
